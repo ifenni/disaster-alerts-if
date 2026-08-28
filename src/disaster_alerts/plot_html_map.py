@@ -12,6 +12,7 @@ import html
 import ipaddress
 import json
 import logging
+import os
 import socket
 from datetime import datetime, timezone
 from pathlib import Path
@@ -655,8 +656,12 @@ def _generate_events_html_map(
 
     # Add base layers
     folium.TileLayer("Esri.WorldImagery", name="Satellite").add_to(map_object)
+    carto_tiles_url = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+    carto_api_key = os.environ.get("CARTO_API_KEY")
+    if carto_api_key:
+        carto_tiles_url += f"?key={carto_api_key}"
     folium.TileLayer(
-        tiles="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+        tiles=carto_tiles_url,
         attr=(
             '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             ' contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'

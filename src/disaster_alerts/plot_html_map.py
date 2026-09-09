@@ -1614,11 +1614,21 @@ def _geometry_from_file(path: str | Path):
                 geometries = []
                 for zone_url in affected:
                     try:
-                        zone_data = requests.get(zone_url).json()
+                        _validate_remote_url(zone_url)
+                        resp = requests.get(zone_url, timeout=30)
+                        resp.raise_for_status()
+                        if len(resp.content) > MAX_GEOJSON_BYTES:
+                            raise ValueError(
+                                f"Response from {zone_url} exceeded max size "
+                                f"({MAX_GEOJSON_BYTES} bytes)"
+                            )
+                        zone_data = resp.json()
                         if zone_data.get("geometry"):
                             geometries.append(shape(zone_data["geometry"]))
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        log.debug(
+                            "affectedZones fetch failed for %s: %s", zone_url, exc
+                        )
 
                 if geometries:
                     return (

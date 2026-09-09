@@ -7,6 +7,7 @@ import html
 import json
 import logging
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -29,6 +30,7 @@ logging.basicConfig(
 )
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5 MiB, covers AOI file uploads
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 HTML_FILE = "activated_events_map.html"
@@ -420,6 +422,7 @@ def _update_run_state(run_id, **updates):
 
 def _mark_task_complete(run_id):
     """Safely decrements the active task counter and marks run false when 0."""
+    run_finished = False
     with processing_runs_lock:
         run_state = processing_runs.get(run_id)
         if run_state is None:
@@ -427,6 +430,12 @@ def _mark_task_complete(run_id):
         run_state["active_tasks"] -= 1
         if run_state["active_tasks"] <= 0:
             run_state["running"] = False
+            run_finished = True
+
+    if run_finished:
+        aoi_dir = Path(BASE_OUTPUT_DIR) / f"aoi_uploads_{run_id}"
+        if aoi_dir.is_dir():
+            shutil.rmtree(aoi_dir, ignore_errors=True)
 
 
 def generate_web_png(tif_path, png_path):

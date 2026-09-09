@@ -247,24 +247,24 @@ def test_process_bbox_rejects_untrusted_url(client):
     }
     resp = client.post("/process_bbox", json=payload)
     assert resp.status_code == 400
-    assert "Untrusted host" in resp.get_json()["error"] or "AOI" in resp.get_json()[
-        "error"
-    ]
+    assert (
+        "Untrusted host" in resp.get_json()["error"]
+        or "AOI" in resp.get_json()["error"]
+    )
 
 
 def test_process_bbox_rejects_missing_aoi(client):
     resp = client.post("/process_bbox", json={"search_type": "overpasses"})
     assert resp.status_code == 400
-    assert "bounding box" in resp.get_json()["error"].lower() or "aoi" in resp.get_json()[
-        "error"
-    ].lower()
+    assert (
+        "bounding box" in resp.get_json()["error"].lower()
+        or "aoi" in resp.get_json()["error"].lower()
+    )
 
 
 def test_processing_status_returns_stage_and_progress(client):
     run_id = web_app._create_run("disasters")
-    web_app._set_progress(
-        run_id, stage="Downloading granules", current=3, total=10
-    )
+    web_app._set_progress(run_id, stage="Downloading granules", current=3, total=10)
 
     resp = client.get("/processing_status", query_string={"run_id": run_id})
     assert resp.status_code == 200

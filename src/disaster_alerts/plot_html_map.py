@@ -743,11 +743,14 @@ def _generate_events_html_map(
                     if (mode === 'coords' || mode === 'draw') {
                         document.getElementById('aoi-coords').style.display = 'flex';
                     } else if (mode === 'wkt') {
-                        document.getElementById('aoi_wkt').style.display = 'inline-block';
+                        document.getElementById('aoi_wkt').style.display =
+                            'inline-block';
                     } else if (mode === 'url') {
-                        document.getElementById('aoi_url').style.display = 'inline-block';
+                        document.getElementById('aoi_url').style.display =
+                            'inline-block';
                     } else if (mode === 'file') {
-                        document.getElementById('aoi_file').style.display = 'inline-block';
+                        document.getElementById('aoi_file').style.display =
+                            'inline-block';
                     }
                     // Draw mode shows the same fields as Coords but read-only,
                     // populated by the Leaflet Draw handler.

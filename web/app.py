@@ -39,6 +39,7 @@ BASE_OUTPUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 # enough that browsers or proxies sometimes abort the request.
 try:
     from utils.utils import create_polygon_from_kml  # noqa: F401
+
     logging.info("Pre-loaded KML parser (utils.utils.create_polygon_from_kml)")
 except Exception as _kml_import_exc:  # noqa: BLE001
     logging.warning("KML parser not available: %s", _kml_import_exc)
@@ -194,11 +195,15 @@ def _aoi_to_bbox_and_geometry(aoi, run_dir):
     if lat_max == lat_min:
         lat_min -= _POINT_INFLATION_DEG
         lat_max += _POINT_INFLATION_DEG
-        logging.warning("AOI collapsed on latitude; inflated by ±%s°", _POINT_INFLATION_DEG)
+        logging.warning(
+            "AOI collapsed on latitude; inflated by ±%s°", _POINT_INFLATION_DEG
+        )
     if lon_max == lon_min:
         lon_min -= _POINT_INFLATION_DEG
         lon_max += _POINT_INFLATION_DEG
-        logging.warning("AOI collapsed on longitude; inflated by ±%s°", _POINT_INFLATION_DEG)
+        logging.warning(
+            "AOI collapsed on longitude; inflated by ±%s°", _POINT_INFLATION_DEG
+        )
 
     return [lat_min, lat_max, lon_min, lon_max], geom
 
@@ -353,10 +358,7 @@ def _watch_for_catalog_phase(run_id, run_start_time, stop_event, interval=0.5):
             for nxt in base.glob("nextpass_outputs_*"):
                 marker = nxt / "satellite_overpasses_map.html"
                 try:
-                    if (
-                        marker.is_file()
-                        and marker.stat().st_mtime >= run_start_time
-                    ):
+                    if marker.is_file() and marker.stat().st_mtime >= run_start_time:
                         _set_progress(run_id, stage="Searching OPERA catalog")
                         return
                 except OSError:
@@ -373,6 +375,7 @@ def _estimate_disasters_totals(search_dir, target_products):
     """
     try:
         from disasters.pipeline import read_opera_metadata
+
         df = read_opera_metadata(search_dir)
     except Exception as exc:  # noqa: BLE001
         logging.warning("Progress estimator: failed to read metadata: %s", exc)
@@ -513,9 +516,7 @@ def run_overpasses_only(run_id, params):
         # granule results to overlay against the overpass grid). Auto-
         # upgrade the -f flag when the user enabled DRCS so their
         # request isn't silently dropped.
-        drcs_enabled = bool(
-            params.get("drcs") == "yes" and params.get("event_date")
-        )
+        drcs_enabled = bool(params.get("drcs") == "yes" and params.get("event_date"))
         functionality_arg = "both" if drcs_enabled else "overpasses"
         # Rich AOI form (WKT / URL / file path / 4 floats) is stashed on the
         # run state by /process_bbox so next_pass gets the exact input the
@@ -1031,9 +1032,7 @@ def process_bbox():
         suffix = Path(safe_name).suffix.lower()
         if suffix not in _ALLOWED_UPLOAD_SUFFIXES:
             return (
-                jsonify(
-                    {"error": f"Unsupported upload suffix {suffix!r}"}
-                ),
+                jsonify({"error": f"Unsupported upload suffix {suffix!r}"}),
                 400,
             )
         saved_path = run_dir / safe_name
@@ -1055,9 +1054,7 @@ def process_bbox():
 
     # Compute next_pass -b tokens inline (per trim decision, no helper).
     if aoi["kind"] in ("draw", "coords"):
-        np_bbox_arg = [
-            str(bbox[0]), str(bbox[1]), str(bbox[2]), str(bbox[3])
-        ]
+        np_bbox_arg = [str(bbox[0]), str(bbox[1]), str(bbox[2]), str(bbox[3])]
     elif aoi["kind"] == "wkt":
         np_bbox_arg = [aoi["value"]]
     elif aoi["kind"] == "url":

@@ -970,8 +970,9 @@ def aoi_preview():
             _bbox, geom = _aoi_to_bbox_and_geometry(aoi, tmp_path)
         except _AoiError as exc:
             return jsonify({"error": str(exc)}), exc.status
-        except Exception as exc:  # noqa: BLE001 - surface as 400 with real message
-            return jsonify({"error": f"Preview failed: {exc}"}), 400
+        except Exception:  # noqa: BLE001 - log details, keep response generic
+            logging.exception("AOI preview failed")
+            return jsonify({"error": "Failed to parse AOI input"}), 400
 
         payload = {"geometry": geom.__geo_interface__}
 
@@ -1043,8 +1044,9 @@ def process_bbox():
         bbox, _geom = _aoi_to_bbox_and_geometry(aoi, run_dir)
     except _AoiError as exc:
         return jsonify({"error": str(exc)}), exc.status
-    except Exception as exc:  # noqa: BLE001 - surface as 400 with real message
-        return jsonify({"error": f"AOI parse failure: {exc}"}), 400
+    except Exception:  # noqa: BLE001 - log details, keep response generic
+        logging.exception("AOI parse failure")
+        return jsonify({"error": "Failed to parse AOI input"}), 400
 
     # Populate bbox keys only when the client didn't already send them.
     # Keeping the params dict byte-identical for draw/coords preserves

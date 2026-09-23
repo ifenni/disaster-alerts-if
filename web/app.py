@@ -1075,7 +1075,10 @@ def process_bbox():
 
     # Compute next_pass -b tokens inline (per trim decision, no helper).
     if drawn is not None:
-        if drawn["lat_min"] == drawn["lat_max"] and drawn["lon_min"] == drawn["lon_max"]:
+        if (
+            drawn["lat_min"] == drawn["lat_max"]
+            and drawn["lon_min"] == drawn["lon_max"]
+        ):
             # next_pass reads two tokens as an exact point (utils.bbox_type),
             # so a point AOI stays a point instead of the inflated box.
             np_bbox_arg = [str(drawn["lat_min"]), str(drawn["lon_min"])]

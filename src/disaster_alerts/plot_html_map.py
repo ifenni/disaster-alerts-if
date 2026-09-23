@@ -210,6 +210,34 @@ def _generate_events_html_map(
                         opacity: 0.4;
                         pointer-events: none;
                     }
+                    /* #control-panel overlays the map at z-index 1000 and the
+                       draw toolbar's Save/Cancel flyout opens rightwards
+                       underneath it, which swallows those clicks. Leaflet's
+                       .leaflet-top is itself z-index 1000 and creates the
+                       stacking context, so it's the one that has to be
+                       lifted — a z-index on .leaflet-draw can't escape it.
+                       Only the narrow left control column moves, so nothing
+                       in the panel gets covered. */
+                    .leaflet-top.leaflet-left {
+                        z-index: 1001;
+                    }
+                    /* Point-placement tool: show an "x" instead of the
+                       default marker-pin icon so it reads as "place a
+                       point" rather than "drop a pin/marker". */
+                    .leaflet-draw-toolbar a.leaflet-draw-draw-marker {
+                        background-image: none !important;
+                        display: flex; align-items: center;
+                        justify-content: center;
+                    }
+                    .leaflet-draw-toolbar a.leaflet-draw-draw-marker::before {
+                        content: "\2715";
+                        font-size: 16px; font-weight: bold; color: #374151;
+                    }
+                    .aoi-point-x {
+                        font-size: 20px; font-weight: bold; color: #b91c1c;
+                        line-height: 22px; text-align: center;
+                        text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff;
+                    }
                     /* Progress overlay shown after SEARCH is submitted. */
                     #progress-overlay {
                         position: fixed; inset: 0; z-index: 5000;
@@ -677,21 +705,94 @@ def _generate_events_html_map(
                 toggleDisDateStrat();
                 updateDisasterOptions();
 
-                // --- Map Box Drawing ---
+                // --- Map Box / Point Drawing ---
+                // Replace the marker tool's default pin icon with an "x", and
+                // relabel it, so it reads as "place a point" rather than
+                // "drop a map pin".
+                if (typeof L !== 'undefined' && L.Draw && L.Draw.Marker) {
+                    L.Draw.Marker.prototype.options.icon = L.divIcon({
+                        className: 'aoi-point-icon',
+                        html: '<div class="aoi-point-x">&times;</div>',
+                        iconSize: [22, 22],
+                        iconAnchor: [11, 11]
+                    });
+                }
+                if (typeof L !== 'undefined' && L.drawLocal) {
+                    L.drawLocal.draw.handlers.marker.tooltip.start =
+                        'Click map to place a point.';
+                    L.drawLocal.draw.toolbar.buttons.marker = 'Place a point';
+                }
+                // Both strings above are consumed while the Draw control is
+                // constructed, which already happened by the time this runs,
+                // so each needs a nudge: the button title is patched on the
+                // rendered DOM, and the cursor tooltip — cached per handler
+                // instance in initialize() — is refreshed on enable.
+                var pointToolBtn = document.querySelector(
+                    'a.leaflet-draw-draw-marker'
+                );
+                if (pointToolBtn) pointToolBtn.title = 'Place a point';
+                if (typeof L !== 'undefined' && L.Draw && L.Draw.Marker) {
+                    var markerAddHooks = L.Draw.Marker.prototype.addHooks;
+                    L.Draw.Marker.prototype.addHooks = function() {
+                        this._initialLabelText =
+                            L.drawLocal.draw.handlers.marker.tooltip.start;
+                        return markerAddHooks.call(this);
+                    };
+                }
+
+                function bboxFromLayer(layer) {
+                    if (layer.getLatLng) {
+                        // Point AOI: lat/lon collapsed to a single coordinate,
+                        // exactly like a WKT POINT(...) input.
+                        var ll = layer.getLatLng();
+                        return {
+                            lat_min: ll.lat,
+                            lat_max: ll.lat,
+                            lon_min: ll.lng,
+                            lon_max: ll.lng
+                        };
+                    }
+                    var bounds = layer.getBounds();
+                    return {
+                        lat_min: bounds.getSouth(),
+                        lat_max: bounds.getNorth(),
+                        lon_min: bounds.getWest(),
+                        lon_max: bounds.getEast()
+                    };
+                }
+
                 {{this._parent.get_name()}}.on('draw:created', function(e) {
                     if (currentBboxLayer) {
                         {{this._parent.get_name()}}.removeLayer(currentBboxLayer);
                     }
                     currentBboxLayer = e.layer;
                     currentBboxLayer.addTo({{this._parent.get_name()}});
-                    var bounds = currentBboxLayer.getBounds();
-                    currentBbox = {
-                        lat_min: bounds.getSouth(),
-                        lat_max: bounds.getNorth(),
-                        lon_min: bounds.getWest(),
-                        lon_max: bounds.getEast()
-                    };
+                    currentBbox = bboxFromLayer(currentBboxLayer);
                     justDrawn = true;
+                    if (currentAoiMode() === 'draw') syncDrawCoords();
+                });
+
+                // Saving an edit has to re-read the shape, otherwise SEARCH
+                // submits the coordinates from before the drag. Only the save
+                // event is handled on purpose: Cancel reverts the layer
+                // without notifying, so a live update would strand the
+                // dragged-to position in currentBbox.
+                {{this._parent.get_name()}}.on('draw:edited', function() {
+                    if (!currentBboxLayer) return;
+                    currentBbox = bboxFromLayer(currentBboxLayer);
+                    if (currentAoiMode() === 'draw') syncDrawCoords();
+                });
+
+                // Likewise a deleted shape must not leave its coordinates
+                // behind as an invisible AOI.
+                {{this._parent.get_name()}}.on('draw:deleted', function(e) {
+                    var removed = false;
+                    e.layers.eachLayer(function(l) {
+                        if (l === currentBboxLayer) removed = true;
+                    });
+                    if (!removed) return;
+                    currentBboxLayer = null;
+                    currentBbox = null;
                     if (currentAoiMode() === 'draw') syncDrawCoords();
                 });
 
@@ -1420,12 +1521,16 @@ def _generate_events_html_map(
     folium.LayerControl(collapsed=False).add_to(map_object)
 
     draw = Draw(
+        # Folium otherwise binds an alert() of the raw GeoJSON to every shape
+        # it creates, which fires when clicking the placed point.
+        show_geometry_on_click=False,
         draw_options={
             "rectangle": True,
             "polygon": False,
             "circle": False,
-            "marker": False,
+            "marker": True,
             "polyline": False,
+            "circlemarker": False,
         },
         edit_options={"edit": True},
     )

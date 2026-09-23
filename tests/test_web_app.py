@@ -211,6 +211,78 @@ def test_process_bbox_accepts_wkt_point_and_inflates(capture_threads, client):
     assert params_passed["lon_max"] > params_passed["lon_min"]
 
 
+def test_process_bbox_draw_point_inflates_despite_client_bbox(capture_threads, client):
+    """The map's point tool mirrors its collapsed bbox into the top-level keys.
+
+    Those must still be inflated: run_disasters turns them into the mosaic
+    master grid, where zero extent produces a 1x1 pixel product.
+    """
+    lat, lon = 41.5086, -94.1748
+    payload = {
+        "aoi": {
+            "kind": "draw",
+            "value": {
+                "lat_min": lat,
+                "lat_max": lat,
+                "lon_min": lon,
+                "lon_max": lon,
+            },
+        },
+        "lat_min": lat,
+        "lat_max": lat,
+        "lon_min": lon,
+        "lon_max": lon,
+        "search_type": "disasters",
+    }
+    resp = client.post("/process_bbox", json=payload)
+    assert resp.status_code == 200
+    run_id = resp.get_json()["run_id"]
+
+    params_passed = capture_threads.started[0][1][1]
+    assert params_passed["lat_max"] > params_passed["lat_min"]
+    assert params_passed["lon_max"] > params_passed["lon_min"]
+
+    # next_pass takes the exact point instead: two tokens is its point form.
+    assert web_app._get_run_state(run_id)["np_bbox_arg"] == [str(lat), str(lon)]
+
+
+def test_process_bbox_draw_rectangle_keeps_client_bbox(capture_threads, client):
+    """A non-degenerate drawn box stays byte-identical for existing callers."""
+    payload = {
+        "aoi": {
+            "kind": "draw",
+            "value": {
+                "lat_min": 1,
+                "lat_max": 2,
+                "lon_min": 3,
+                "lon_max": 4,
+            },
+        },
+        "lat_min": 1,
+        "lat_max": 2,
+        "lon_min": 3,
+        "lon_max": 4,
+        "search_type": "overpasses",
+    }
+    resp = client.post("/process_bbox", json=payload)
+    assert resp.status_code == 200
+    run_id = resp.get_json()["run_id"]
+
+    params_passed = capture_threads.started[0][1][1]
+    assert [
+        params_passed["lat_min"],
+        params_passed["lat_max"],
+        params_passed["lon_min"],
+        params_passed["lon_max"],
+    ] == [1, 2, 3, 4]
+    assert web_app._get_run_state(run_id)["np_bbox_arg"] == [
+        "1.0",
+        "2.0",
+        "3.0",
+        "4.0",
+    ]
+
+
 def test_process_bbox_accepts_geojson_file_upload(capture_threads, client, tmp_path):
     geojson_body = b'{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,3],[0,3],[0,0]]]}'
     payload = {"aoi": {"kind": "file", "value": None}, "search_type": "overpasses"}

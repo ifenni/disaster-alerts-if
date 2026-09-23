@@ -1057,15 +1057,30 @@ def process_bbox():
         logging.exception("AOI parse failure")
         return jsonify({"error": "Failed to parse AOI input"}), 400
 
-    # Populate bbox keys only when the client didn't already send them.
-    # Keeping the params dict byte-identical for draw/coords preserves
-    # backwards compatibility with existing /process_bbox JSON callers.
-    if not all(k in data for k in ("lat_min", "lat_max", "lon_min", "lon_max")):
+    # The client's own numbers are left alone when they're usable: keeping the
+    # params dict byte-identical for draw/coords preserves backwards
+    # compatibility with existing /process_bbox JSON callers. A box that
+    # collapses on either axis is not usable — run_disasters feeds these keys
+    # into the mosaic master grid, where zero extent yields a 1x1 pixel
+    # product — so there the inflated bbox wins. The map's point tool and
+    # coincident typed corners both send exactly that.
+    drawn = aoi["value"] if aoi["kind"] in ("draw", "coords") else None
+    zero_extent = drawn is not None and (
+        drawn["lat_min"] == drawn["lat_max"] or drawn["lon_min"] == drawn["lon_max"]
+    )
+    if zero_extent or not all(
+        k in data for k in ("lat_min", "lat_max", "lon_min", "lon_max")
+    ):
         data["lat_min"], data["lat_max"], data["lon_min"], data["lon_max"] = bbox
 
     # Compute next_pass -b tokens inline (per trim decision, no helper).
-    if aoi["kind"] in ("draw", "coords"):
-        np_bbox_arg = [str(bbox[0]), str(bbox[1]), str(bbox[2]), str(bbox[3])]
+    if drawn is not None:
+        if drawn["lat_min"] == drawn["lat_max"] and drawn["lon_min"] == drawn["lon_max"]:
+            # next_pass reads two tokens as an exact point (utils.bbox_type),
+            # so a point AOI stays a point instead of the inflated box.
+            np_bbox_arg = [str(drawn["lat_min"]), str(drawn["lon_min"])]
+        else:
+            np_bbox_arg = [str(bbox[0]), str(bbox[1]), str(bbox[2]), str(bbox[3])]
     elif aoi["kind"] == "wkt":
         np_bbox_arg = [aoi["value"]]
     elif aoi["kind"] == "url":
